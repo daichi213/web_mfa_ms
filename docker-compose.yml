@@ -1,0 +1,81 @@
+version: "3"
+volumes:
+  db-volume:
+services:
+  db:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    container_name: postgres
+    volumes:
+      # Initialize DB Create
+      - ./db/initdb:/docker-entrypoint-initdb.d
+      # confの設定
+      - ./db/postgresql.conf:/var/lib/postgresql/data
+      # - ./db/schedule:/home/schedule
+      # - ./db/log:/var/lib/POSTGRESQL
+      # - db-volume:/var/lib/POSTGRESQL
+    # TODO schemaを使用してテスト用とdev用を分けるか、db-volumeを削除して再度upしてみる
+    environment:
+      LANG: "ja_JP.UTF-8"
+      LC_ALL: "ja_JP.UTF-8"
+      POSTGRES_MULTIPLE_DATABASES: schedule_test,schedule_dev,schedule_prod
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+  front:
+    build:
+      context: ./front
+      dockerfile: Dockerfile
+    user: root
+    volumes:
+      - ./front:/usr/src/app
+    # command: sh -c "cd schedule_app && npm run dev"
+    ports:
+      - "3000:3000"
+    tty: true
+    environment:
+      # API側のエンドポイント指定
+      BASE_URL: "http://api:8080"
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    # command: sh -c "go run main.go"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./api:/go/src/api/
+      # 開発用ツールに関してはホスト側に予め配置しておく
+      - ./api/bin:/go/bin
+    tty: true
+    environment:
+      TEST_MODE: "true"
+      POSTGRES_DATABASE: "schedule_dev"
+      POSTGRES_TEST_DATABASE: "schedule_test"
+      POSTGRES_USER: "dev_user"
+      POSTGRES_PASSWORD: "password"
+      POSTGRES_PORT: 5432
+    depends_on:
+      - db
+    # profiles:
+    #   - debug
+  nginx:
+    build:
+      context: ./nginx/
+      dockerfile: Dockerfile
+    container_name: nginx
+    user: root
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./nginx/:/etc/nginx/conf.d/
+      # - ../front/build:/var/www
+      - ./nginx/logs:/var/log/nginx
+    # command: sh -c "chown -R nginx:nginx /etc/nginx"
+    # tty: true
+    # stdin_open: true
+    depends_on:
+      - front

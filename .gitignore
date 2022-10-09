@@ -1,0 +1,4 @@
+postgresql.conf/
+*.log
+*.stat
+pkg/
